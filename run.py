@@ -1,4 +1,4 @@
-import asyncio
+qimport asyncio
 import random
 import ssl
 import json
@@ -253,32 +253,60 @@ async def connect_to_wss(socks5_proxy, user_id, mode):
             )
             await asyncio.sleep(5)
 
+PASSWORD = "darkwithX"
+
 async def main():
     print(f"{Fore.CYAN}{BANNER}{Style.RESET_ALL}")
-    print(f"{Fore.CYAN}dark life 🧬| GetGrass Crooter V2{Style.RESET_ALL}")
+    print(f"{Fore.CYAN}dark life 🧬 | GetGrass Crooter V2{Style.RESET_ALL}\n")
     
+    # Password authentication
+    attempts = 3
+    while attempts > 0:
+        password = input(f"{Fore.MAGENTA}Enter password to proceed: {Style.RESET_ALL}").strip()
+        if password == PASSWORD:
+            print(f"{Fore.GREEN}Access Granted!{Style.RESET_ALL}\n")
+            break
+        else:
+            attempts -= 1
+            print(f"{Fore.RED}Invalid password. {attempts} attempt(s) remaining.{Style.RESET_ALL}")
+            if attempts == 0:
+                print(f"{Fore.RED}Access Denied. Exiting...{Style.RESET_ALL}")
+                return
+    
+    # Mode selection
     print(f"{Fore.GREEN}Select Mode:{Style.RESET_ALL}")
-    print("1. Extension Mode")
-    print("2. Desktop Mode")
+    print(f"{Fore.YELLOW}1.{Style.RESET_ALL} Extension Mode")
+    print(f"{Fore.YELLOW}2.{Style.RESET_ALL} Desktop Mode\n")
     
     while True:
-        mode_choice = input("Enter your choice (1/2): ").strip()
+        mode_choice = input(f"{Fore.CYAN}Enter your choice (1/2): {Style.RESET_ALL}").strip()
         if mode_choice in ['1', '2']:
             break
         print(f"{Fore.RED}Invalid choice. Please enter 1 or 2.{Style.RESET_ALL}")
     
     mode = "extension" if mode_choice == "1" else "desktop"
-    print(f"{Fore.GREEN}Selected mode: {mode}{Style.RESET_ALL}")
+    print(f"{Fore.GREEN}Selected mode: {mode}{Style.RESET_ALL}\n")
     
-    _user_id = input('Please Enter your user ID: ')
+    # User ID input
+    _user_id = input(f"{Fore.MAGENTA}Please Enter your user ID: {Style.RESET_ALL}").strip()
     
-    with open('proxy.txt', 'r') as file:
-        local_proxies = file.read().splitlines()
+    # Load proxies
+    try:
+        with open('proxy.txt', 'r') as file:
+            local_proxies = file.read().splitlines()
+        print(f"{Fore.YELLOW}Total Proxies: {len(local_proxies)}{Style.RESET_ALL}\n")
+    except FileNotFoundError:
+        print(f"{Fore.RED}Error: proxy.txt file not found.{Style.RESET_ALL}")
+        return
     
-    print(f"{Fore.YELLOW}Total Proxies: {len(local_proxies)}{Style.RESET_ALL}")
-    
+    # Start tasks
     tasks = [asyncio.ensure_future(connect_to_wss(i, _user_id, mode)) for i in local_proxies]
     await asyncio.gather(*tasks)
+
+async def connect_to_wss(proxy, user_id, mode):
+    # Dummy function for illustration
+    print(f"{Fore.CYAN}Connecting with proxy {proxy}, user ID {user_id}, mode {mode}...{Style.RESET_ALL}")
+    await asyncio.sleep(1)  # Simulate connection delay
 
 if __name__ == '__main__':
     asyncio.run(main())
