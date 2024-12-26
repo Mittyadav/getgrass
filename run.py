@@ -293,12 +293,8 @@ async def main():
     _user_id = input('Please Enter your user ID: ')
     
     with open('proxy.txt', 'r') as file:
-        local_proxies = file.read().splitlines
-
-print(f"{Fore.YELLOW}Total Proxies: {len(local_proxies)}{Style.RESET_ALL}")
+        local_proxies = file.read().splitlines()
+    print(f"{Fore.YELLOW}Total Proxies: {len(local_proxies)}{Style.RESET_ALL}")
     
     tasks = [asyncio.ensure_future(connect_to_wss(i, _user_id, mode)) for i in local_proxies]
     await asyncio.gather(*tasks)
-
-if __name__ == '__main__':
-    asyncio.run(main())
