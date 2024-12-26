@@ -12,14 +12,17 @@ from websockets_proxy import Proxy, proxy_connect
 
 init(autoreset=True)
 
+# Function to create gradient text
 def gradient_text(text, colors):
     gradient = ""
     for i, char in enumerate(text):
-        gradient += f"\033[38;2;{colors[i % len(colors)][0]};{colors[i % len(colors)][1]};{colors[i % len(colors)][2]}m{char}"
+        color = colors[i % len(colors)]
+        gradient += f"\033[38;2;{color[0]};{color[1]};{color[2]}m{char}"
     return gradient + Style.RESET_ALL
 
-# Gradient banner with RGB colors
+# Gradient banner with colors
 BANNER_TEXT = """
+
  -================= ≫ ──── ≪•◦ ❈ ◦•≫ ──── ≪=================-
  │                                                          │
  │  ██████╗  █████╗ ██████╗ ██╗  ██╗                        │
@@ -32,7 +35,12 @@ BANNER_TEXT = """
  │                                                          │
  ╰─━━━━━━━━━━━━━━━━━━━━━━━━Termux-os━━━━━━━━━━━━━━━━━━━━━━━─╯
 """
-GRADIENT_COLORS = [(255, 0, 0), (255, 127, 0), (255, 255, 0), (0, 255, 0), (0, 127, 255), (0, 0, 255), (139, 0, 255)]
+
+# Gradient colors
+GRADIENT_COLORS = [
+    (255, 0, 0), (255, 165, 0), (255, 255, 0), (0, 128, 0),
+    (0, 0, 255), (75, 0, 130), (238, 130, 238)
+]
 BANNER = gradient_text(BANNER_TEXT, GRADIENT_COLORS)
 
 EDGE_USERAGENTS = [
@@ -82,19 +90,192 @@ def colorful_log(proxy, device_id, message_type, message_content, is_sent=False,
     print(log_message)
 
 async def connect_to_wss(socks5_proxy, user_id, mode):
-    # As before (unchanged)
+    device_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, socks5_proxy))
+    
+    random_user_agent = random.choice(EDGE_USERAGENTS)
+    
+    colorful_log(
+        proxy=socks5_proxy,  
+        device_id=device_id, 
+        message_type="INITIALIZATION", 
+        message_content=f"User Agent: {random_user_agent}",
+        mode=mode
+    )
+
+    has_received_action = False
+    is_authenticated = False
+    
+    while True:
+        try:
+            await asyncio.sleep(random.randint(1, 10) / 10)
+            custom_headers = {
+                "User-Agent": random_user_agent,
+                "Origin": "chrome-extension://lkbnfiajjmbhnfledhphioinpickokdi" if mode == "extension" else None
+            }
+            custom_headers = {k: v for k, v in custom_headers.items() if v is not None}
+            
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+            
+            urilist = [
+                "wss://proxy2.wynd.network:4444/",
+                "wss://proxy2.wynd.network:4650/"
+            ]
+            uri = random.choice(urilist)
+            server_hostname = "proxy.wynd.network"
+            proxy = Proxy.from_url(socks5_proxy)
+            
+            async with proxy_connect(uri, proxy=proxy, ssl=ssl_context, server_hostname=server_hostname,
+                                     extra_headers=custom_headers) as websocket:
+                async def send_ping():
+                    while True:
+                        if has_received_action:
+                            send_message = json.dumps(
+                                {"id": str(uuid.uuid5(uuid.NAMESPACE_DNS, socks5_proxy)), 
+                                 "version": "1.0.0", 
+                                 "action": "PING", 
+                                 "data": {}})
+                            
+                            colorful_log(
+                                proxy=socks5_proxy,  
+                                device_id=device_id, 
+                                message_type="SENDING PING", 
+                                message_content=send_message,
+                                is_sent=True,
+                                mode=mode
+                            )
+                            
+                            await websocket.send(send_message)
+                        await asyncio.sleep(5)
+
+                await asyncio.sleep(1)
+                ping_task = asyncio.create_task(send_ping())
+
+                while True:
+                    if is_authenticated and not has_received_action:
+                        colorful_log(
+                            proxy=socks5_proxy,
+                            device_id=device_id,
+                            message_type="AUTHENTICATED | WAIT UNTIL THE PING GATE OPENS",
+                            message_content="Waiting for " + ("HTTP_REQUEST" if mode == "extension" else "OPEN_TUNNEL"),
+                            mode=mode
+                        )
+                    
+                    response = await websocket.recv()
+                    message = json.loads(response)
+                    
+                    colorful_log(
+                        proxy=socks5_proxy, 
+                        device_id=device_id, 
+                        message_type="RECEIVED", 
+                        message_content=json.dumps(message),
+                        mode=mode
+                    )
+
+                    if message.get("action") == "AUTH":
+                        auth_response = {
+                            "id": message["id"],
+                            "origin_action": "AUTH",
+                            "result": {
+                                "browser_id": device_id,
+                                "user_id": user_id,
+                                "user_agent": random_user_agent,
+                                "timestamp": int(time.time()),
+                                "device_type": "extension" if mode == "extension" else "desktop",
+                                "version": "4.26.2" if mode == "extension" else "4.30.0"
+                            }
+                        }
+                        
+                        if mode == "extension":
+                            auth_response["result"]["extension_id"] = "lkbnfiajjmbhnfledhphioinpickokdi"
+                        
+                        colorful_log(
+                            proxy=socks5_proxy,  
+                            device_id=device_id, 
+                            message_type="AUTHENTICATING", 
+                            message_content=json.dumps(auth_response),
+                            is_sent=True,
+                            mode=mode
+                        )
+                        
+                        await websocket.send(json.dumps(auth_response))
+                        is_authenticated = True
+                    
+                    elif message.get("action") in ["HTTP_REQUEST", "OPEN_TUNNEL"]:
+                        has_received_action = True
+                        request_data = message["data"]
+                        
+                        headers = {
+                            "User-Agent": custom_headers["User-Agent"],
+                            "Content-Type": "application/json; charset=utf-8"
+                        }
+                        
+                        async with aiohttp.ClientSession() as session:
+                            async with session.get(request_data["url"], headers=headers) as api_response:
+                                content = await api_response.text()
+                                encoded_body = base64.b64encode(content.encode()).decode()
+                                
+                                status_text = HTTP_STATUS_CODES.get(api_response.status, "")
+                                
+                                http_response = {
+                                    "id": message["id"],
+                                    "origin_action": message["action"],
+                                    "result": {
+                                        "url": request_data["url"],
+                                        "status": api_response.status,
+                                        "status_text": status_text,
+                                        "headers": dict(api_response.headers),
+                                        "body": encoded_body
+                                    }
+                                }
+                                
+                                colorful_log(
+                                    proxy=socks5_proxy,
+                                    device_id=device_id,
+                                    message_type="OPENING PING ACCESS",
+                                    message_content=json.dumps(http_response),
+                                    is_sent=True,
+                                    mode=mode
+                                )
+                                
+                                await websocket.send(json.dumps(http_response))
+
+                    elif message.get("action") == "PONG":
+                        pong_response = {"id": message["id"], "origin_action": "PONG"}
+                        
+                        colorful_log(
+                            proxy=socks5_proxy, 
+                            device_id=device_id, 
+                            message_type="SENDING PONG", 
+                            message_content=json.dumps(pong_response),
+                            is_sent=True,
+                            mode=mode
+                        )
+                        
+                        await websocket.send(json.dumps(pong_response))
+                        
+        except Exception as e:
+            colorful_log(
+                proxy=socks5_proxy, 
+                device_id=device_id, 
+                message_type="ERROR", 
+                message_content=str(e),
+                mode=mode
+            )
+            await asyncio.sleep(5)
 
 async def main():
     print(BANNER)
     print(f"{Fore.CYAN}dark life 🧬| GetGrass Crooter V2{Style.RESET_ALL}")
     
-    # Add password protection
+    # Password protection added
     password = input(f"{Fore.YELLOW}Enter password to proceed: {Style.RESET_ALL}").strip()
     if password != "darkwithX":
-        print(f"{Fore.RED}Invalid password. Exiting.{Style.RESET_ALL}")
+        print(f"{Fore.RED}Invalid password. Exiting...{Style.RESET_ALL}")
         return
-
-    print(f"{Fore.GREEN}Password verified successfully.{Style.RESET_ALL}")
+    
+    print(f"{Fore.GREEN}Password verified successfully!{Style.RESET_ALL}")
     
     print(f"{Fore.GREEN}Select Mode:{Style.RESET_ALL}")
     print("1. Extension Mode")
@@ -112,9 +293,9 @@ async def main():
     _user_id = input('Please Enter your user ID: ')
     
     with open('proxy.txt', 'r') as file:
-        local_proxies = file.read().splitlines()
-    
-    print(f"{Fore.YELLOW}Total Proxies: {len(local_proxies)}{Style.RESET_ALL}")
+        local_proxies = file.read().splitlines
+
+print(f"{Fore.YELLOW}Total Proxies: {len(local_proxies)}{Style.RESET_ALL}")
     
     tasks = [asyncio.ensure_future(connect_to_wss(i, _user_id, mode)) for i in local_proxies]
     await asyncio.gather(*tasks)
