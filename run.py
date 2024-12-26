@@ -1,4 +1,4 @@
-qimport asyncio
+import asyncio
 import random
 import ssl
 import json
