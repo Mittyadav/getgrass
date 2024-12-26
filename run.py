@@ -291,22 +291,13 @@ async def main():
     _user_id = input(f"{Fore.MAGENTA}Please Enter your user ID: {Style.RESET_ALL}").strip()
     
     # Load proxies
-    try:
-        with open('proxy.txt', 'r') as file:
-            local_proxies = file.read().splitlines()
-        print(f"{Fore.YELLOW}Total Proxies: {len(local_proxies)}{Style.RESET_ALL}\n")
-    except FileNotFoundError:
-        print(f"{Fore.RED}Error: proxy.txt file not found.{Style.RESET_ALL}")
-        return
+    with open('proxy.txt', 'r') as file:
+        local_proxies = file.read().splitlines()
     
-    # Start tasks
+    print(f"{Fore.YELLOW}Total Proxies: {len(local_proxies)}{Style.RESET_ALL}")
+    
     tasks = [asyncio.ensure_future(connect_to_wss(i, _user_id, mode)) for i in local_proxies]
     await asyncio.gather(*tasks)
-
-async def connect_to_wss(proxy, user_id, mode):
-    # Dummy function for illustration
-    print(f"{Fore.CYAN}Connecting with proxy {proxy}, user ID {user_id}, mode {mode}...{Style.RESET_ALL}")
-    await asyncio.sleep(1)  # Simulate connection delay
 
 if __name__ == '__main__':
     asyncio.run(main())
